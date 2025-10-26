@@ -1,0 +1,136 @@
+!pip install opencv-python-headless
+
+
+import cv2
+import datetime
+from google.colab.patches import cv2_imshow
+
+# Load video (CCTV or webcam feed)
+cap = cv2.VideoCapture('/content/1693010599_video (1).mp4')  # Or use 0 for webcam
+
+# Read the first two frames
+ret, frame1 = cap.read()
+ret, frame2 = cap.read()
+
+log_file = open("motion_logs.txt", "a")
+
+while cap.isOpened():
+    # Compute frame difference
+    diff = cv2.absdiff(frame1, frame2)
+    gray = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    _, thresh = cv2.threshold(blur, 20, 255, cv2.THRESH_BINARY)
+    dilated = cv2.dilate(thresh, None, iterations=3)
+    contours, _ = cv2.findContours(dilated, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    motion_detected = False
+
+    for contour in contours:
+        if cv2.contourArea(contour) < 1000:
+            continue
+        motion_detected = True
+        x, y, w, h = cv2.boundingRect(contour)
+        cv2.rectangle(frame1, (x, y), (x+w, y+h), (0, 255, 0), 2)
+        cv2.putText(frame1, "Motion Detected", (10, 20),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+
+    if motion_detected:
+        # Get the timestamp (in milliseconds)
+        timestamp = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000  # Convert to seconds
+        timestamp_str = str(datetime.timedelta(seconds=timestamp))  # Convert to HH:MM:SS format
+
+        # Log timestamp of motion detected
+        log_file.write(f"Motion detected at {timestamp_str}\n")
+        log_file.flush()
+
+    cv2_imshow(frame1)  # Use cv2_imshow() in Colab instead of cv2.imshow()
+    frame1 = frame2
+    ret, frame2 = cap.read()
+
+    if not ret or cv2.waitKey(10) == ord('q'):
+        break
+
+log_file.close()
+cap.release()
+cv2.destroyAllWindows()
+
+
+
+# 1. Install YOLOv8
+!pip install -q ultralytics
+from ultralytics import YOLO
+
+# 2. Import dependencies
+import cv2
+import datetime
+from google.colab.patches import cv2_imshow
+from IPython.display import HTML
+from base64 import b64encode
+
+
+video_path = "/content/1693010599_video.mp4"
+log_file_path = "/content/yolo_detection_logs.txt"
+output_path = "/content/yolo_detected_output.mp4"
+
+cap = cv2.VideoCapture(video_path)
+model = YOLO("yolov8n.pt")
+fps = cap.get(cv2.CAP_PROP_FPS)
+frame_height, frame_width = int(cap.get(4)), int(cap.get(3))
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+out = cv2.VideoWriter(output_path, fourcc, fps, (frame_width, frame_height))
+
+log_file = open(log_file_path, "a")
+
+frame_count = 0
+while cap.isOpened():
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    results = model(frame, verbose=False)
+    detections = results[0].boxes
+
+    # Time for this frame
+    frame_time = cap.get(cv2.CAP_PROP_POS_MSEC)
+    current_time = datetime.datetime.fromtimestamp(frame_time / 1000.0)
+    timestamp_str = current_time.strftime("%Y-%m-%d %H:%M:%S")
+
+    # Annotate each detection
+    for box in detections:
+        x1, y1, x2, y2 = map(int, box.xyxy[0])
+        conf = float(box.conf[0])
+        class_id = int(box.cls[0])
+        label = model.names[class_id]
+
+        if conf > 0.5:
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(frame, f"{label} {conf:.2f}", (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            log_file.write(f"{label} detected at {timestamp_str} with {conf:.2f} confidence\n")
+            log_file.flush()
+
+
+    cv2.putText(frame, f"Time: {timestamp_str}", (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+    cv2.putText(frame, f"FPS: {int(fps)}", (10, 90),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+
+    out.write(frame)
+    frame_count += 1
+
+log_file.close()
+cap.release()
+out.release()
+
+print(f"\n✅ Detection log saved to: {log_file_path}")
+print(f"🎞️ Annotated video saved to: {output_path}")
+
+
+mp4 = open(output_path, 'rb').read()
+data_url = "data:video/mp4;base64," + b64encode(mp4).decode()
+HTML(f"""
+<video width=640 controls>
+  <source src="{data_url}" type="video/mp4">
+</video>
+""")
+  
