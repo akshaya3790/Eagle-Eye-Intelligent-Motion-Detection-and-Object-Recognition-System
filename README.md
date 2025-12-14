@@ -1,4 +1,4 @@
-# Eagle-Eye-Intelligent-Motion-Detection-and-Object-Recognition-System
+# Intelligent-Motion-Detection-and-Object-Recognition-System
 
 EagleEye is an AI-powered video surveillance system that combines OpenCV-based motion detection with YOLOv8 object recognition for intelligent monitoring and activity logging.
 The system processes video feeds frame-by-frame to detect motion using frame differencing and contour analysis, while YOLOv8 performs real-time object detection with confidence scoring.
